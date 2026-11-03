@@ -1,7 +1,13 @@
 # EnvLens 🔍⚡
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-GitHub%20Pages-cyan?style=for-the-badge&logo=github)](https://spy-github22.github.io/envlens/)
+[![CI & Deployment](https://github.com/SPY-Github22/envlens/actions/workflows/ci.yml/badge.svg)](https://github.com/SPY-Github22/envlens/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 > **The Multi-Environment Matrix & Secret Leak Doctor**  
 > *Visual .env parity checker, accidental secret leak detector, type inference linter, and 1-click sanitized `.env.example` generator.*
+
+🌐 **Live Web App**: [https://spy-github22.github.io/envlens/](https://spy-github22.github.io/envlens/)
 
 ---
 
