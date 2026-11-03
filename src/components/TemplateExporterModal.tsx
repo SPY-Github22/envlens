@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { X, Download, Copy, Check, FileCode, CheckSquare, Square } from 'lucide-react';
+import { X, Download, Copy, Check, FileCode, CheckSquare, Square, Box, ShieldCheck } from 'lucide-react';
 import { MatrixRow } from '../core/matrix';
-import { generateExampleTemplate } from '../core/generator';
+import { generateExampleTemplate, generateDockerComposeEnv, generateKubernetesSecret } from '../core/generator';
+import { EnvEntry } from '../core/parser';
 
 interface TemplateExporterModalProps {
   isOpen: boolean;
@@ -9,24 +10,53 @@ interface TemplateExporterModalProps {
   rows: MatrixRow[];
 }
 
+type ExportFormat = 'dotenv' | 'docker' | 'k8s';
+
 export const TemplateExporterModal: React.FC<TemplateExporterModalProps> = ({
   isOpen,
   onClose,
   rows,
 }) => {
+  const [format, setFormat] = useState<ExportFormat>('dotenv');
   const [alignEquals, setAlignEquals] = useState(false);
   const [alphabeticalSort, setAlphabeticalSort] = useState(true);
   const [includeComments, setIncludeComments] = useState(true);
   const [copied, setCopied] = useState(false);
 
+  const entries: EnvEntry[] = useMemo(() => {
+    return rows.map((r, i) => {
+      let sampleVal = '';
+      for (const valObj of Object.values(r.values)) {
+        if (valObj.isPresent && valObj.value.trim()) {
+          sampleVal = valObj.value;
+          break;
+        }
+      }
+      return {
+        key: r.key,
+        value: sampleVal,
+        rawLine: `${r.key}=${sampleVal}`,
+        lineNumber: i + 1,
+        comment: r.primaryComment,
+        precedingComments: [],
+      };
+    });
+  }, [rows]);
+
   const templateContent = useMemo(() => {
     if (!isOpen) return '';
+    if (format === 'docker') {
+      return generateDockerComposeEnv(entries);
+    }
+    if (format === 'k8s') {
+      return generateKubernetesSecret(entries);
+    }
     return generateExampleTemplate(rows, {
       alignEquals,
       alphabeticalSort,
       includeComments,
     });
-  }, [isOpen, rows, alignEquals, alphabeticalSort, includeComments]);
+  }, [isOpen, rows, entries, format, alignEquals, alphabeticalSort, includeComments]);
 
   if (!isOpen) return null;
 
@@ -36,12 +66,23 @@ export const TemplateExporterModal: React.FC<TemplateExporterModalProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const getDownloadFilename = () => {
+    switch (format) {
+      case 'docker':
+        return 'docker-compose.env.yml';
+      case 'k8s':
+        return 'k8s-secret.yaml';
+      default:
+        return '.env.example';
+    }
+  };
+
   const handleDownload = () => {
     const blob = new Blob([templateContent], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = '.env.example';
+    link.download = getDownloadFilename();
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -59,10 +100,10 @@ export const TemplateExporterModal: React.FC<TemplateExporterModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
-                Sanitized .env.example Template Generator
+                Multi-Format Environment Exporter
               </h2>
               <p className="text-xs text-neutral-400">
-                100% sanitized with dummy placeholders for safe commitment to Git repositories
+                Export sanitized .env.example templates, Docker Compose environment blocks, or Kubernetes Secret manifests
               </p>
             </div>
           </div>
@@ -75,45 +116,90 @@ export const TemplateExporterModal: React.FC<TemplateExporterModalProps> = ({
           </button>
         </div>
 
+        {/* Format Selector Tabs */}
+        <div className="px-6 py-2.5 bg-neutral-950/80 border-b border-neutral-800 flex items-center gap-2 text-xs">
+          <button
+            onClick={() => setFormat('dotenv')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition ${
+              format === 'dotenv'
+                ? 'bg-indigo-600 text-white'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+            }`}
+          >
+            <FileCode className="w-3.5 h-3.5" />
+            <span>.env.example Template</span>
+          </button>
+
+          <button
+            onClick={() => setFormat('docker')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition ${
+              format === 'docker'
+                ? 'bg-indigo-600 text-white'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+            }`}
+          >
+            <Box className="w-3.5 h-3.5" />
+            <span>Docker Compose YAML</span>
+          </button>
+
+          <button
+            onClick={() => setFormat('k8s')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition ${
+              format === 'k8s'
+                ? 'bg-indigo-600 text-white'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Kubernetes Secret (YAML)</span>
+          </button>
+        </div>
+
         {/* Options Toolbar */}
         <div className="px-6 py-2.5 bg-neutral-950/60 border-b border-neutral-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-4 text-neutral-300">
-            <button
-              onClick={() => setAlphabeticalSort(!alphabeticalSort)}
-              className="flex items-center gap-1.5 hover:text-white transition"
-            >
-              {alphabeticalSort ? (
-                <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
-              ) : (
-                <Square className="w-3.5 h-3.5 text-neutral-500" />
-              )}
-              <span>Sort Alphabetically</span>
-            </button>
+          {format === 'dotenv' ? (
+            <div className="flex items-center gap-4 text-neutral-300">
+              <button
+                onClick={() => setAlphabeticalSort(!alphabeticalSort)}
+                className="flex items-center gap-1.5 hover:text-white transition"
+              >
+                {alphabeticalSort ? (
+                  <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 text-neutral-500" />
+                )}
+                <span>Sort Alphabetically</span>
+              </button>
 
-            <button
-              onClick={() => setAlignEquals(!alignEquals)}
-              className="flex items-center gap-1.5 hover:text-white transition"
-            >
-              {alignEquals ? (
-                <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
-              ) : (
-                <Square className="w-3.5 h-3.5 text-neutral-500" />
-              )}
-              <span>Align Equals ('=')</span>
-            </button>
+              <button
+                onClick={() => setAlignEquals(!alignEquals)}
+                className="flex items-center gap-1.5 hover:text-white transition"
+              >
+                {alignEquals ? (
+                  <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 text-neutral-500" />
+                )}
+                <span>Align Equals ('=')</span>
+              </button>
 
-            <button
-              onClick={() => setIncludeComments(!includeComments)}
-              className="flex items-center gap-1.5 hover:text-white transition"
-            >
-              {includeComments ? (
-                <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
-              ) : (
-                <Square className="w-3.5 h-3.5 text-neutral-500" />
-              )}
-              <span>Preserve Comments</span>
-            </button>
-          </div>
+              <button
+                onClick={() => setIncludeComments(!includeComments)}
+                className="flex items-center gap-1.5 hover:text-white transition"
+              >
+                {includeComments ? (
+                  <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 text-neutral-500" />
+                )}
+                <span>Preserve Comments</span>
+              </button>
+            </div>
+          ) : (
+            <div className="text-neutral-400">
+              Formatted according to standard cloud-native deployment specifications
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <button
@@ -125,7 +211,7 @@ export const TemplateExporterModal: React.FC<TemplateExporterModalProps> = ({
               ) : (
                 <Copy className="w-3.5 h-3.5 text-neutral-400" />
               )}
-              <span>{copied ? 'Copied!' : 'Copy Template'}</span>
+              <span>{copied ? 'Copied!' : 'Copy to Clipboard'}</span>
             </button>
 
             <button
@@ -133,7 +219,7 @@ export const TemplateExporterModal: React.FC<TemplateExporterModalProps> = ({
               className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-sm transition"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Download .env.example</span>
+              <span>Download {getDownloadFilename()}</span>
             </button>
           </div>
         </div>

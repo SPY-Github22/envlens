@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseDotEnv } from '../src/core/parser';
 import { buildEnvMatrix } from '../src/core/matrix';
-import { generateExampleTemplate, formatDotEnv } from '../src/core/generator';
+import { generateExampleTemplate, formatDotEnv, generateDockerComposeEnv, generateKubernetesSecret } from '../src/core/generator';
 
 describe('Template and Format Generator', () => {
   it('should generate a sanitized .env.example template from matrix', () => {
@@ -35,5 +35,35 @@ describe('Template and Format Generator', () => {
 
     expect(formatted).toContain('DB_HOST                      =localhost');
     expect(formatted).toContain('SUPER_LONG_API_KEY_IDENTIFIER=secret123 # inline comment');
+  });
+
+  it('should generate valid Docker Compose environment YAML', () => {
+    const parsed = parseDotEnv(`
+      PORT=3000
+      APP_NAME="My Application"
+    `);
+    const yaml = generateDockerComposeEnv(parsed.entries, 'web');
+
+    expect(yaml).toContain('services:');
+    expect(yaml).toContain('  web:');
+    expect(yaml).toContain('    environment:');
+    expect(yaml).toContain('      - PORT="3000"');
+    expect(yaml).toContain('      - APP_NAME="My Application"');
+  });
+
+  it('should generate valid Kubernetes Secret manifest', () => {
+    const parsed = parseDotEnv(`
+      PORT=3000
+      DB_USER=admin
+    `);
+    const k8s = generateKubernetesSecret(parsed.entries, 'backend-secrets');
+
+    expect(k8s).toContain('apiVersion: v1');
+    expect(k8s).toContain('kind: Secret');
+    expect(k8s).toContain('name: backend-secrets');
+    expect(k8s).toContain('type: Opaque');
+    expect(k8s).toContain('stringData:');
+    expect(k8s).toContain('  PORT: "3000"');
+    expect(k8s).toContain('  DB_USER: "admin"');
   });
 });
